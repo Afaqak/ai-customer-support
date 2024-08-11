@@ -97,7 +97,7 @@ export default function Home() {
       <Stack
         direction="column"
         width={{ xs: "100%", sm: "500px",md:'600px' }}
-        height={{ xs: "95%", md: "700px" }}
+        height={{ xs: "90vh", md: "80vh" }}
         border="4px solid #000"
         padding={2}
         spacing={2}
