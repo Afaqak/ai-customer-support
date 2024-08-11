@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import { Box, Stack, TextField, Button } from "@mui/material";
+import { Bot, Loader2, User} from "lucide-react";
 export default function Home() {
   const [messages, setMessages] = useState([
     {
@@ -85,24 +86,38 @@ export default function Home() {
       width="100vw"
       height="100vh"
       display="flex"
-      flexDirection={"column"}
-      justifyContent={"center"}
-      alignItems={"center"}
+      flexDirection="column"
+      justifyContent="center"
+      alignItems="center"
+      sx={{
+        bgcolor: "#F5F5F5",
+        padding: "16px",
+      }}
     >
       <Stack
         direction="column"
-        width="600px"
-        height="700px"
-        border="1px solid #000"
+        width={{ xs: "90%", md: "600px" }}
+        height={{ xs: "80%", md: "700px" }}
+        border="4px solid #000"
         padding={2}
         spacing={2}
+        sx={{
+          boxShadow: "4px 4px 0 #000",
+          borderRadius: "12px",
+        }}
       >
         <Stack
           direction="column"
           spacing={2}
           flexGrow={1}
-          overflow={"auto"}
+          overflow="auto"
           maxHeight="100vh"
+          sx={{
+            bgcolor: "#FFF",
+            padding: "16px",
+            borderRadius: "8px",
+            border: "2px solid #000",
+          }}
         >
           {messages.map((message, index) => (
             <Box
@@ -111,16 +126,26 @@ export default function Home() {
               justifyContent={
                 message.role === "assistant" ? "flex-start" : "flex-end"
               }
+              alignItems="center"
             >
+              {message.role === "assistant" ? (
+                <Bot size={26} style={{ marginRight: "8px",flexShrink:0 }} /> 
+              ) : (
+                <User size={26} style={{ marginRight: "8px",flexShrink:0 }} /> 
+              )}
               <Box
                 bgcolor={
                   message.role === "assistant"
-                    ? "primary.main"
-                    : "secondary.main"
+                    ? "#FB6612"
+                    : "#6C63FF" 
                 }
                 color="#fff"
-                borderRadius={16}
+                borderRadius="16px"
                 p={3}
+                sx={{
+                  boxShadow: "4px 4px 0 #000", 
+                  border: "2px solid #000",
+                }}
               >
                 {message.content}
               </Box>
@@ -129,20 +154,33 @@ export default function Home() {
           <div ref={messagesEndRef} />
         </Stack>
         <Stack direction="row" spacing={2}>
-          <TextField
-            label="Message"
-            fullWidth
+          <input
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             onKeyPress={handleKeyPress}
             disabled={isLoading}
+            placeholder="message"
+            className="input_style"
           />
           <Button
             variant="contained"
             onClick={sendMessage}
             disabled={isLoading}
+            sx={{
+              bgcolor: "#6C63FF",
+              color: "#FFF",
+              boxShadow: "4px 4px 0 #000",
+              borderRadius: "8px",
+              "&:hover": {
+                bgcolor: "#5a53d6",
+              },
+            }}
           >
-            {isLoading ? "Sending..." : "Send"}
+            {isLoading ? (
+              <Loader2 size={24} className="spinning-loader" />
+            ) : (
+              "Send"
+            )}
           </Button>
         </Stack>
       </Stack>
