@@ -91,13 +91,13 @@ export default function Home() {
       alignItems="center"
       sx={{
         bgcolor: "#F5F5F5",
-        padding: "16px",
+        padding: "10px",
       }}
     >
       <Stack
         direction="column"
-        width={{ xs: "90%", md: "600px" }}
-        height={{ xs: "80%", md: "700px" }}
+        width={{ xs: "100%", sm: "500px",md:'600px' }}
+        height={{ xs: "95%", md: "700px" }}
         border="4px solid #000"
         padding={2}
         spacing={2}
@@ -142,6 +142,7 @@ export default function Home() {
                 color="#fff"
                 borderRadius="16px"
                 p={3}
+                fontSize={{xs:'15px',md:'16px'}}
                 sx={{
                   boxShadow: "4px 4px 0 #000", 
                   border: "2px solid #000",
