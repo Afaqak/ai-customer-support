@@ -21,7 +21,7 @@ const Navbar = ({ user }) => {
   };
 
   return (
-    <AppBar position="sticky" sx={{ backgroundColor: "#333", color: "#FFF" }}>
+    <AppBar position="static" sx={{ backgroundColor: "#333", color: "#FFF" }}>
       <Toolbar
         sx={{
           display: "flex",

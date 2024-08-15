@@ -1,9 +1,10 @@
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@mui/material";
-import { theme } from "@/client-layout";
+
 import Navbar from "@/components/navbar";
 import { getAuth } from "@/utils/get-auth";
+import { theme } from "@/theme";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -13,17 +14,14 @@ export const metadata = {
 };
 
 export default async function RootLayout({ children }) {
+  const auth = await getAuth();
 
-  const auth=await getAuth()
-  console.log(auth,'AUTH')
   return (
     <html lang="en">
       <ThemeProvider theme={theme}>
-
-      <body className={inter.className}>
-        <Navbar user={auth?.user}/>
-        {children}
-     
+        <body className={inter.className}>
+          <Navbar user={auth?.user} />
+          {children}
         </body>
       </ThemeProvider>
     </html>

@@ -4,7 +4,7 @@ export async function GET(req, { params }) {
   const { searchParams } = new URL(req.url);
   const skip = searchParams.get("skip");
   const take = searchParams.get("take");
-  console.log(skip, take);
+
   try {
     const feedbacks = await prisma.feedback.findMany({
       skip: parseInt(skip),
@@ -15,7 +15,7 @@ export async function GET(req, { params }) {
         },
       ],
       include: {
-      user: true,
+        user: true,
       },
     });
     return NextResponse.json(feedbacks);

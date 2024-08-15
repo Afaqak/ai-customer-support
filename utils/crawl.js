@@ -3,9 +3,13 @@ import Crawler from "./crawler";
 import { Document } from "langchain/document";
 import Bottleneck from "bottleneck";
 import { uuid } from "uuidv4";
-import { TokenTextSplitter } from "langchain/text_splitter";
+import {
+  RecursiveCharacterTextSplitter,
+  TokenTextSplitter,
+} from "langchain/text_splitter";
 import { summarizeLongDocument } from "./summarizer";
-import { OllamaEmbeddings } from "@langchain/ollama";
+
+
 
 const limiter = new Bottleneck({
   minTime: 50,
@@ -71,10 +75,11 @@ export default async function POST(req, res) {
 
   const documents = await Promise.all(
     pages.map(async (row) => {
-      const splitter = new TokenTextSplitter({
-        encodingName: "gpt2",
-        chunkSize: 300,
-        chunkOverlap: 20,
+      const splitter = new RecursiveCharacterTextSplitter({
+        chunk_size: 300,
+        chunk_overlap: 20,
+        separators: ["|", "##", ">", "-"],
+        is_separator_regex: false,
       });
 
       const pageContent = shouldSummarize
@@ -85,7 +90,6 @@ export default async function POST(req, res) {
         new Document({
           pageContent,
           metadata: {
-            url: row.url,
             text: truncateStringByBytes(pageContent, 36000),
           },
         }),
@@ -96,10 +100,7 @@ export default async function POST(req, res) {
 
   const index = pinecone && pinecone.Index(pineconeIndexName);
 
-  const embedder = new OllamaEmbeddings({
-    model: "llama3.1",
-    baseUrl: "http://localhost:11434",
-  });
+
   let counter = 0;
 
   const getEmbedding = async (doc) => {

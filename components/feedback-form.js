@@ -1,11 +1,34 @@
 import React, { useState } from "react";
-import { Box, Typography, Stack, Button, TextField } from "@mui/material";
+import {
+  Box,
+  Typography,
+  Stack,
+  Button,
+  TextField,
+  Snackbar,
+  Alert,
+} from "@mui/material";
 import { useSWRConfig } from "swr";
 
-const FeedbackForm = ({ feedbacks, handleLoadMore, skip, setSkip }) => {
+const FeedbackForm = ({
+  feedbacks,
+  handleLoadMore,
+  skip,
+  setSkip,
+  isAuthenticated,
+}) => {
   const [feedback, setFeedback] = useState("");
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState("");
   const { mutate } = useSWRConfig();
+
   const handleFeedbackSubmit = async () => {
+    if (!isAuthenticated) {
+      setSnackbarMessage("You need to be logged in to submit feedback.");
+      setSnackbarOpen(true);
+      return;
+    }
+
     try {
       const response = await fetch("/api/feedback/create-feedback", {
         method: "POST",
@@ -34,8 +57,12 @@ const FeedbackForm = ({ feedbacks, handleLoadMore, skip, setSkip }) => {
     }
   };
 
+  const handleSnackbarClose = () => {
+    setSnackbarOpen(false);
+  };
+
   return (
-    <Box marginTop={10}>
+    <Box marginTop={4}>
       <Typography
         variant="h5"
         fontWeight={700}
@@ -92,26 +119,27 @@ const FeedbackForm = ({ feedbacks, handleLoadMore, skip, setSkip }) => {
           </Button>
         </Box>
 
-        <Stack paddingRight={1} overflow={"auto"} spacing={2}>
-          {feedbacks?.map((feedback, index) => (
-            <Box
-              key={index}
-              sx={{
-                bgcolor: "#FFF",
-                padding: "16px",
-                borderRadius: "8px",
-                border: "4px solid #000",
-                boxShadow: "4px 4px 0 #000",
-                fontSize: { xs: "14px", md: "15px" },
-                color: "#333",
-              }}
-            >
-              <h4 style={{ marginBottom: "4px" }}>
-                {feedback?.user?.displayName}
-              </h4>
-              {feedback?.text}
-            </Box>
-          ))}
+        <Stack spacing={2}>
+          {Array.isArray(feedbacks) &&
+            feedbacks?.map((feedback, index) => (
+              <Box
+                key={index}
+                sx={{
+                  bgcolor: "#FFF",
+                  padding: "16px",
+                  borderRadius: "8px",
+                  border: "4px solid #000",
+                  boxShadow: "4px 4px 0 #000",
+                  fontSize: { xs: "14px", md: "15px" },
+                  color: "#333",
+                }}
+              >
+                <h4 style={{ marginBottom: "4px" }}>
+                  {feedback?.user?.displayName}
+                </h4>
+                {feedback?.text}
+              </Box>
+            ))}
         </Stack>
         {feedbacks?.length >= skip && (
           <Button
@@ -119,17 +147,22 @@ const FeedbackForm = ({ feedbacks, handleLoadMore, skip, setSkip }) => {
             onClick={handleLoadMore}
             sx={{
               marginTop: 2,
-              bgcolor: "#6C63FF",
-              color: "#FFF",
-              "&:hover": {
-                bgcolor: "#5a53d6",
-              },
             }}
           >
             Load More
           </Button>
         )}
       </Stack>
+
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={6000}
+        onClose={handleSnackbarClose}
+      >
+        <Alert onClose={handleSnackbarClose} severity="warning">
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

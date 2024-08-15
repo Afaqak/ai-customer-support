@@ -10,8 +10,6 @@ const llm = new ChatGroq({
   maxTokens: 600,
   maxRetries: 1,
   apiKey: process.env.GROQ_API_KEY,
-  verbose: true,
-
 });
 
 const { summarizerTemplate, summarizerDocumentTemplate } = templates;
@@ -61,12 +59,11 @@ const summarizeLongDocument = async ({ document, inquiry, onSummaryDone }) => {
   const templateLength = inquiry
     ? summarizerTemplate.length
     : summarizerDocumentTemplate.length;
-  console.log(document.length)
+  console.log(document.length);
   try {
     if (document.length + templateLength > 150000) {
-      console.log(document.length, "DOC_LENGTH");
-      const chunks = chunkSubstr(document, 3000);
-      console.log(chunks, "CHUNKS");
+      const chunks = chunkSubstr(document, 4000);
+
       let summarizedChunks = [];
 
       for (const chunk of chunks) {
@@ -75,6 +72,7 @@ const summarizeLongDocument = async ({ document, inquiry, onSummaryDone }) => {
           inquiry,
           onSummaryDone,
         });
+        console.log(summary, "SUMMARY");
         summarizedChunks.push(summary);
       }
       const result = summarizedChunks.join("\n");

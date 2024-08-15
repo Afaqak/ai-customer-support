@@ -8,6 +8,7 @@ import { PromptTemplate } from "@langchain/core/prompts";
 import { templates } from "@/templates";
 import { NextResponse } from "next/server";
 import { summarizeLongDocument } from "@/utils/summarizer";
+import pusher from "@/utils/pusher";
 
 const getMatchesFromEmbeddings = async (embeddings, pinecone, topK) => {
   if (!process.env.PINECONE_INDEX_NAME) {
@@ -18,7 +19,7 @@ const getMatchesFromEmbeddings = async (embeddings, pinecone, topK) => {
   try {
     const queryResult = await index.query({
       vector: embeddings,
-      topK: 2,
+      topK,
       includeMetadata: true,
     });
     return (
@@ -28,12 +29,10 @@ const getMatchesFromEmbeddings = async (embeddings, pinecone, topK) => {
       })) || []
     );
   } catch (e) {
-    console.log("Error querying embeddings: ", e);
+    console.error("Error querying embeddings: ", e);
     throw new Error(`Error querying embeddings: ${e}`);
   }
 };
-
-export { getMatchesFromEmbeddings };
 
 let pinecone = null;
 
@@ -52,7 +51,7 @@ const initPineconeClient = async () => {
   pinecone = new Pinecone({
     apiKey: process.env.PINECONE_API_KEY,
   });
-  console.log("init pinecone");
+  console.log("Pinecone client initialized.");
 };
 
 export async function POST(req) {
@@ -62,16 +61,28 @@ export async function POST(req) {
 
   const data = await req.json();
   const auth = await getAuth();
-  let summarizedCount = 0;
-  const conversationLog = new ConversationLog(auth?.user?.id);
-  const conversationHistory = await conversationLog.getConversation({
-    limit: 10,
-  });
+  const userId = auth?.user?.id;
+  const sessionId = data?.sessionId;
+  const lastUserPrompt = data?.messages[data?.messages.length - 1]?.content;
 
-  await conversationLog.addEntry({
-    entry: data[data?.length - 1]?.content,
-    speaker: "USER",
-  });
+  let conversationHistory = "";
+  if (userId) {
+    const conversationLog = new ConversationLog(userId);
+    conversationHistory = await conversationLog.getConversation({ limit: 10 });
+
+    await conversationLog.addEntry({
+      entry: lastUserPrompt,
+      speaker: "USER",
+    });
+  }
+
+  const pusherChannel = userId ? `user-${userId}` : sessionId;
+
+  if (pusherChannel) {
+    pusher.trigger(pusherChannel, "status", {
+      status: "I'm gathering the information for you... Hang tight!",
+    });
+  }
 
   const inquiryChain = new LLMChain({
     llm,
@@ -81,8 +92,8 @@ export async function POST(req) {
     }),
   });
   const inquiryChainResult = await inquiryChain.call({
-    userPrompt: data[data?.length - 1]?.content,
-    conversationHistory,
+    userPrompt: lastUserPrompt,
+    conversationHistory: conversationHistory || "",
   });
   const inquiry = inquiryChainResult.text;
 
@@ -92,10 +103,10 @@ export async function POST(req) {
   const matches = await getMatchesFromEmbeddings(
     embeddings?.embedding?.values,
     pinecone,
-    2
+    6
   );
 
-  const docs = [...new Set(matches?.map((match) => match?.metadata?.text))];
+  const docs = [...new Set(matches?.map((match) => match?.metadata?.chunk))];
 
   const chat = new ChatGroq({
     model: "mixtral-8x7b-32768",
@@ -115,9 +126,14 @@ export async function POST(req) {
     prompt: promptTemplate,
     llm: chat,
   });
-  const allDocs = docs.join("\n");
-  console.log(docs,docs[0].length,allDocs.length)
 
+  if (pusherChannel) {
+    pusher.trigger(pusherChannel, "status", {
+      status: "Just a moment, finalizing the response...",
+    });
+  }
+
+  const allDocs = docs.join("\n");
   const summary =
     allDocs.length > 4000
       ? await summarizeLongDocument({ document: allDocs, inquiry })
@@ -125,26 +141,27 @@ export async function POST(req) {
 
   const resultChain = await chain.call({
     summaries: summary,
-    question: data[data?.length - 1]?.content,
-    conversationHistory,
+    question: lastUserPrompt,
+    conversationHistory: conversationHistory || "",
   });
+
+  if (pusherChannel) {
+    pusher.trigger(pusherChannel, "status", {
+      removePrev: true,
+    });
+  }
 
   const result = resultChain.text;
-
-  // Split the final result into chunks for streaming
-  const CHUNK_SIZE = 500; // Set an appropriate chunk size
-  const chunks = result.match(new RegExp(`.{1,${CHUNK_SIZE}}`, "g"));
-
-  const stream = new ReadableStream({
-    start(controller) {
-      const encoder = new TextEncoder();
-      chunks.forEach((chunk) => {
-        const encodedChunk = encoder.encode(chunk);
-        controller.enqueue(encodedChunk);
+  const CHUNK_SIZE = 500;
+  const chunks = result.match(new RegExp(`.{1,${CHUNK_SIZE}}`, "g")) || [];
+ 
+  for (let i = 0; i < chunks.length; i++) {
+    if (pusherChannel) {
+      pusher.trigger(pusherChannel, "content", {
+        chunk: chunks[i],
       });
-      controller.close();
-    },
-  });
+    }
+  }
 
-  return new NextResponse(stream);
+  return new NextResponse("Done");
 }
