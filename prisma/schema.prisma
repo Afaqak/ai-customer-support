@@ -1,0 +1,47 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "cockroachdb"
+  url      = env("DATABASE_URL")
+}
+
+enum SpeakerType {
+  ASSISTANT
+  USER
+}
+
+model User {
+  id             String         @id
+  sessions       Session[]
+  feedbacks      Feedback[]
+  displayName    String
+  hashedPassword String
+  email          String         @unique
+  Conversation   Conversation[]
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  userId    String
+  user      User     @relation(references: [id], fields: [userId], onDelete: Cascade)
+}
+
+model Feedback {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(references: [id], fields: [userId], onDelete: Cascade)
+  text      String
+  createdAt DateTime @default(now())
+}
+
+model Conversation {
+  id        String      @id @default(uuid())
+  userId    String
+  user      User        @relation(references: [id], fields: [userId], onDelete: Cascade)
+  entry     String
+  speaker   SpeakerType
+  createdAt DateTime    @default(now())
+}

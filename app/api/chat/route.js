@@ -1,61 +1,150 @@
+import { ConversationLog } from "@/db";
+import { getAuth } from "@/utils/get-auth";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { ChatGroq } from "@langchain/groq";
+import { Pinecone } from "@pinecone-database/pinecone";
+import { LLMChain } from "langchain/chains";
+import { PromptTemplate } from "@langchain/core/prompts";
+import { templates } from "@/templates";
 import { NextResponse } from "next/server";
-import OpenAI from "openai";
+import { summarizeLongDocument } from "@/utils/summarizer";
 
-const systemPrompt = `You are an AI customer support assistant for an online retail store called "ShopEase." Your primary goal is to assist customers with their inquiries in a friendly, efficient, and professional manner. You can help with product recommendations, order tracking, processing returns and refunds, and answering general questions about the store's policies and promotions.
+const getMatchesFromEmbeddings = async (embeddings, pinecone, topK) => {
+  if (!process.env.PINECONE_INDEX_NAME) {
+    throw new Error("PINECONE_INDEX_NAME is not set");
+  }
 
-Guidelines:
+  const index = pinecone.Index("animebot");
+  try {
+    const queryResult = await index.query({
+      vector: embeddings,
+      topK: 2,
+      includeMetadata: true,
+    });
+    return (
+      queryResult.matches?.map((match) => ({
+        ...match,
+        metadata: match.metadata,
+      })) || []
+    );
+  } catch (e) {
+    console.log("Error querying embeddings: ", e);
+    throw new Error(`Error querying embeddings: ${e}`);
+  }
+};
 
-Be polite and empathetic: Always greet customers warmly and address them by name if provided. Show understanding and empathy, especially when customers are facing issues or expressing frustration.
+export { getMatchesFromEmbeddings };
 
-Be concise and clear: Provide clear and concise answers. If a customer asks a complex question, break down the response into easily digestible parts.
+let pinecone = null;
 
-Stay on brand: Maintain a tone that reflects the "ShopEase" brand—friendly, helpful, and professional. Use positive language and avoid technical jargon.
+const genAI = new GoogleGenerativeAI(process.env.VERTEX_API_KEY);
 
-Offer solutions: When a customer presents an issue, focus on resolving it efficiently. If you cannot directly resolve it, guide the customer to the next best step, such as contacting a human agent.
-
-Use relevant data: Access the customer's order history and relevant information to personalize your responses. Ensure that all data used is up-to-date and accurate.
-
-Handle edge cases: If a customer query falls outside your scope, politely inform them and offer to escalate the issue to a human representative.
-
-Maintain privacy and security: Do not share sensitive information unless the customer has verified their identity. Always prioritize the security of customer data.`;
-
-const openAi = new OpenAI({
-  baseURL: "https://openrouter.ai/api/v1",
-  apiKey: process.env.OPEN_ROUTER_API_KEY,
+const llm = new ChatGroq({
+  model: "mixtral-8x7b-32768",
+  temperature: 0,
+  maxTokens: 300,
+  maxRetries: 1,
+  apiKey: process.env.GROQ_API_KEY,
+  verbose: true,
 });
 
-export async function POST(req) {
-  const data = await req.json();
-
-  const completion = await openAi.chat.completions.create({
-    model: "google/gemini-flash-1.5",
-    messages: [
-      {
-        role: "system",
-        content: systemPrompt,
-      },
-      ...data,
-    ],
-    stream: true,
+const initPineconeClient = async () => {
+  pinecone = new Pinecone({
+    apiKey: process.env.PINECONE_API_KEY,
   });
+  console.log("init pinecone");
+};
+
+export async function POST(req) {
+  if (!pinecone) {
+    await initPineconeClient();
+  }
+
+  const data = await req.json();
+  const auth = await getAuth();
+  let summarizedCount = 0;
+  const conversationLog = new ConversationLog(auth?.user?.id);
+  const conversationHistory = await conversationLog.getConversation({
+    limit: 10,
+  });
+
+  await conversationLog.addEntry({
+    entry: data[data?.length - 1]?.content,
+    speaker: "USER",
+  });
+
+  const inquiryChain = new LLMChain({
+    llm,
+    prompt: new PromptTemplate({
+      template: templates.inquiryTemplate,
+      inputVariables: ["userPrompt", "conversationHistory"],
+    }),
+  });
+  const inquiryChainResult = await inquiryChain.call({
+    userPrompt: data[data?.length - 1]?.content,
+    conversationHistory,
+  });
+  const inquiry = inquiryChainResult.text;
+
+  const model = genAI.getGenerativeModel({ model: "text-embedding-004" });
+  const embeddings = await model.embedContent(inquiry);
+
+  const matches = await getMatchesFromEmbeddings(
+    embeddings?.embedding?.values,
+    pinecone,
+    2
+  );
+
+  const docs = [...new Set(matches?.map((match) => match?.metadata?.text))];
+
+  const chat = new ChatGroq({
+    model: "mixtral-8x7b-32768",
+    temperature: 0,
+    maxTokens: 200,
+    maxRetries: 1,
+    apiKey: process.env.GROQ_API_KEY,
+    verbose: true,
+  });
+
+  const promptTemplate = new PromptTemplate({
+    template: templates.qaTemplate,
+    inputVariables: ["summaries", "question", "conversationHistory"],
+  });
+
+  const chain = new LLMChain({
+    prompt: promptTemplate,
+    llm: chat,
+  });
+  const allDocs = docs.join("\n");
+  console.log(docs,docs[0].length,allDocs.length)
+
+  const summary =
+    allDocs.length > 4000
+      ? await summarizeLongDocument({ document: allDocs, inquiry })
+      : allDocs;
+
+  const resultChain = await chain.call({
+    summaries: summary,
+    question: data[data?.length - 1]?.content,
+    conversationHistory,
+  });
+
+  const result = resultChain.text;
+
+  // Split the final result into chunks for streaming
+  const CHUNK_SIZE = 500; // Set an appropriate chunk size
+  const chunks = result.match(new RegExp(`.{1,${CHUNK_SIZE}}`, "g"));
 
   const stream = new ReadableStream({
-    async start(controller) {
+    start(controller) {
       const encoder = new TextEncoder();
-      try {
-        for await (const chunk of completion) {
-          const content = chunk.choices[0]?.delta?.content;
-          if (content) {
-            const text = encoder.encode(content);
-            controller.enqueue(text);
-          }
-        }
-      } catch (error) {
-        controller.error(error);
-      } finally {
-        controller.close();
-      }
+      chunks.forEach((chunk) => {
+        const encodedChunk = encoder.encode(chunk);
+        controller.enqueue(encodedChunk);
+      });
+      controller.close();
     },
   });
+
   return new NextResponse(stream);
 }

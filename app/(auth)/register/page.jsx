@@ -1,61 +1,67 @@
 "use client";
 import React, { useState } from "react";
-import {
-  Box,
-  Button,
-  Typography,
-  TextField,
-  CircularProgress,
-  Snackbar,
-  Alert,
-} from "@mui/material";
+import { Box, Button, Typography } from "@mui/material";
 import { useForm } from "react-hook-form";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { EyeIcon, EyeOffIcon } from "lucide-react";
-import { login } from "@/actions/login";
+import { register as registerAction } from "@/actions/register";
+import { useRouter } from "next/navigation";
+import Snackbar from "@mui/material/Snackbar";
+import MuiAlert from "@mui/material/Alert";
 
-const LoginPage = () => {
-  const router = useRouter();
+const Alert = React.forwardRef(function Alert(props, ref) {
+  return <MuiAlert elevation={6} ref={ref} variant="filled" {...props} />;
+});
+
+const RegisterPage = () => {
   const {
     register,
     handleSubmit,
     formState: { errors },
     watch,
   } = useForm();
-  const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
   const [openSnackbar, setOpenSnackbar] = useState(false);
   const [snackbarSeverity, setSnackbarSeverity] = useState("success");
   const [snackbarMessage, setSnackbarMessage] = useState("");
 
   const onSubmit = async (data) => {
-    console.log(data, "DATA");
-    setIsLoading(true);
     try {
-      await login(data);
-      setSnackbarMessage("Login successful!");
-      setSnackbarSeverity("success");
-      setOpenSnackbar(true);
-      router.push("/");
+      await registerAction(data)
+        .then(() => {
+          setSnackbarMessage("Login successful!");
+          setSnackbarSeverity("success");
+          setOpenSnackbar(true);
+          router.push("/");
+        })
+        .catch((err) => {
+          setSnackbarMessage(
+            err.message || "Registration failed. Please try again."
+          );
+          setSnackbarSeverity("error");
+          setOpenSnackbar(true);
+        });
     } catch (err) {
-      setSnackbarMessage(err.message || "Login failed.");
+      setSnackbarMessage(
+        err.message || "Registration failed. Please try again."
+      );
       setSnackbarSeverity("error");
       setOpenSnackbar(true);
-    } finally {
-      setIsLoading(false);
     }
-  };
-
-  const handleClickShowPassword = () => {
-    setShowPassword(!showPassword);
   };
 
   const handleCloseSnackbar = (event, reason) => {
     if (reason === "clickaway") {
       return;
     }
+
     setOpenSnackbar(false);
+  };
+
+  const [showPassword, setShowPassword] = React.useState(false);
+
+  const handleClickShowPassword = () => {
+    setShowPassword(!showPassword);
   };
 
   return (
@@ -74,7 +80,7 @@ const LoginPage = () => {
         bgcolor="#f5f5f5"
         border="4px solid #333"
         borderRadius="12px"
-        boxShadow="4px 4px 0 #000"
+        boxShadow="8px 8px 0 #000"
       >
         <Typography
           variant="h5"
@@ -82,13 +88,12 @@ const LoginPage = () => {
             marginBottom: "2rem",
             color: "#6C63FF",
             fontWeight: "bold",
-            textAlign:'left'
+            textAlign: "left",
           }}
         >
-          Login 
+          Register
         </Typography>
 
-  
         <Box
           component="form"
           onSubmit={handleSubmit(onSubmit)}
@@ -100,20 +105,21 @@ const LoginPage = () => {
           }}
         >
           <label
-            htmlFor="email"
+            htmlFor="displayName"
             style={{
               textAlign: "left",
               fontWeight: "bold",
-              display: "block", 
+
+              display: "block", // Ensures label is above input
             }}
           >
-            Display Name or Email
+            Display Name
           </label>
           <input
-            id="email"
+            id="displayName"
             type="text"
-            {...register("email", {
-              required: "Display Name or Email is required",
+            {...register("displayName", {
+              required: "Display Name is required",
             })}
             style={{
               padding: "0.75rem",
@@ -123,6 +129,45 @@ const LoginPage = () => {
               outline: "none",
               boxShadow: "4px 4px 0 #000",
               width: "100%",
+              boxSizing: "border-box",
+              transition: "border-color 0.3s ease",
+            }}
+          />
+          {errors.displayName && (
+            <Typography
+              variant="body2"
+              color="error"
+              sx={{ textAlign: "left" }}
+            >
+              {errors.displayName.message}
+            </Typography>
+          )}
+
+          <label
+            htmlFor="email"
+            style={{
+              textAlign: "left",
+              fontWeight: "bold",
+
+              display: "block",
+            }}
+          >
+            Email
+          </label>
+          <input
+            id="email"
+            type="email"
+            {...register("email", { required: "Email is required" })}
+            style={{
+              padding: "0.75rem",
+              border: "2px solid #333",
+              borderRadius: "8px",
+              fontSize: "1rem",
+              outline: "none",
+              boxShadow: "4px 4px 0 #000",
+              width: "100%",
+              boxSizing: "border-box",
+              transition: "border-color 0.3s ease",
             }}
           />
           {errors.email && (
@@ -140,8 +185,8 @@ const LoginPage = () => {
             style={{
               textAlign: "left",
               fontWeight: "bold",
-              marginTop: "10px",
-              display: "block", // Ensures label is above input
+
+              display: "block",
             }}
           >
             Password
@@ -159,6 +204,8 @@ const LoginPage = () => {
                 outline: "none",
                 boxShadow: "4px 4px 0 #000",
                 width: "100%",
+                boxSizing: "border-box",
+                transition: "border-color 0.3s ease",
               }}
             />
             <Button
@@ -192,7 +239,6 @@ const LoginPage = () => {
             type="submit"
             variant="contained"
             fullWidth
-            disabled={isLoading}
             sx={{
               backgroundColor: "#333",
               color: "#FFF",
@@ -202,7 +248,7 @@ const LoginPage = () => {
               },
             }}
           >
-            {isLoading ? <CircularProgress size={20} /> : "Login"}
+            Register
           </Button>
         </Box>
 
@@ -213,9 +259,9 @@ const LoginPage = () => {
             color: "#333",
           }}
         >
-          Don t have an account?{" "}
-          <Link href="/register" style={{ color: "#333", marginTop: "10px" }}>
-            Register
+          Already have an account?{" "}
+          <Link href="/login" style={{ color: "#333", marginTop: "10px" }}>
+            Log In
           </Link>
         </Typography>
       </Box>
@@ -237,4 +283,4 @@ const LoginPage = () => {
   );
 };
 
-export default LoginPage;
+export default RegisterPage;

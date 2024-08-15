@@ -1,7 +1,10 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import { Box, Stack, TextField, Button } from "@mui/material";
-import { Bot, Loader2, User} from "lucide-react";
+import { Box, Stack, Button, TextField } from "@mui/material";
+import { Bot, Loader2, User } from "lucide-react";
+import FeedbackForm from "@/components/feedback-form";
+import useSWR, { useSWRConfig } from "swr";
+
 export default function Home() {
   const [messages, setMessages] = useState([
     {
@@ -12,6 +15,25 @@ export default function Home() {
   ]);
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  const fetcher = async (url) => {
+    try {
+      const response = await fetch(url);
+      return await response.json();
+    } catch (err) {
+      console.log(err);
+    }
+  };
+
+  const { data: feedbacks, error } = useSWR(
+    "/api/feedback?skip=0&take=6",
+    fetcher
+  );
+  const [skip, setSkip] = useState(0);
+  const [take, setTake] = useState(6);
+
+  const { mutate } = useSWRConfig();
+
   const sendMessage = async () => {
     setIsLoading(true);
     if (!message.trim()) return;
@@ -65,6 +87,7 @@ export default function Home() {
     }
     setIsLoading(false);
   };
+
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -81,22 +104,50 @@ export default function Home() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  const handleLoadMore = async () => {
+    try {
+      const newSkip = skip + take;
+      const response = await fetch(
+        `/api/feedback?skip=${newSkip}&take=${take}`
+      );
+
+      if (response.ok) {
+        const newFeedbacks = await response.json();
+        console.log(newFeedbacks);
+        setSkip(newSkip);
+
+        await mutate(
+          `/api/feedback?skip=0&take=6`,
+          (prevData) => {
+            return [...feedbacks, ...newFeedbacks];
+          },
+          false
+        );
+      } else {
+        console.error("Error loading more feedbacks:", response.statusText);
+      }
+    } catch (error) {
+      console.error("Error:", error);
+    }
+  };
+
   return (
     <Box
       width="100vw"
-      height="100vh"
+      minHeight={'100vh'}
       display="flex"
-      flexDirection="column"
       justifyContent="center"
-      alignItems="center"
+      gap={10}
       sx={{
         bgcolor: "#F5F5F5",
         padding: "10px",
       }}
     >
       <Stack
+        marginTop={10}
         direction="column"
-        width={{ xs: "100%", sm: "500px",md:'600px' }}
+        width={{ xs: "100%", sm: "500px", md: "600px" }}
         height={{ xs: "90vh", md: "80vh" }}
         border="4px solid #000"
         padding={2}
@@ -129,22 +180,18 @@ export default function Home() {
               alignItems="center"
             >
               {message.role === "assistant" ? (
-                <Bot size={26} style={{ marginRight: "8px",flexShrink:0 }} /> 
+                <Bot size={26} style={{ marginRight: "8px", flexShrink: 0 }} />
               ) : (
-                <User size={26} style={{ marginRight: "8px",flexShrink:0 }} /> 
+                <User size={26} style={{ marginRight: "8px", flexShrink: 0 }} />
               )}
               <Box
-                bgcolor={
-                  message.role === "assistant"
-                    ? "#FB6612"
-                    : "#6C63FF" 
-                }
+                bgcolor={message.role === "assistant" ? "#FB6612" : "#6C63FF"}
                 color="#fff"
                 borderRadius="16px"
                 p={3}
-                fontSize={{xs:'15px',md:'16px'}}
+                fontSize={{ xs: "15px", md: "16px" }}
                 sx={{
-                  boxShadow: "4px 4px 0 #000", 
+                  boxShadow: "4px 4px 0 #000",
                   border: "2px solid #000",
                 }}
               >
@@ -160,7 +207,7 @@ export default function Home() {
             onChange={(e) => setMessage(e.target.value)}
             onKeyPress={handleKeyPress}
             disabled={isLoading}
-            placeholder="message"
+            placeholder="Type a message..."
             className="input_style"
           />
           <Button
@@ -185,6 +232,8 @@ export default function Home() {
           </Button>
         </Stack>
       </Stack>
+        
+      <FeedbackForm skip={skip} setSkip={setSkip} feedbacks={feedbacks} handleLoadMore={handleLoadMore} />
     </Box>
   );
 }
